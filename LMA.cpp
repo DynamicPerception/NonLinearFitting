@@ -5,7 +5,7 @@ Analysis for the Physical Sciences," McGraw-Hill, 1969; Adapted by
 Wayne Weimer & David Harris. Jackknife error algorithm of M.S. Caceci,
 Anal. Chem. 1989, 61, 2324. Translated to ANSI C by Douglas Harris &
 Tim Seufert 7-94 */
-
+#define OSX
 #include "stdafx.h"
 #include <stdio.h>
 #include <Stdlib.h>
@@ -22,27 +22,26 @@ Tim Seufert 7-94 */
 /***********************************************************/
 int param, iteration, nloops, n, cycle, nfree;
 int npts;                                                   /* Number of data pairs */
-long double x[maxnpts], y[maxnpts], sigmay[maxnpts];        /*x,y,y uncertainty*/
-long double weight[maxnpts];                                /*Weighting factor*/
-long double yfit[maxnpts];                                  /*Calculated values of y */
-long double a[nterms];                                      /* a[i]=c[i] params */
-long double sigmaa[nterms];
-long double b[nterms];
-long double beta[nterms], c[nterms];                        /*To be fit by program*/
-long double finala[nterms], lastsigmaa[nterms];
-long double alpha[nterms][nterms];
-long double arry[nterms][nterms];
-long double aug[nterms][nterms * 2];                        /* For matrix inversion */
-long double deriv[maxnpts][nterms];                         /* Derivatives */
-long double flambda;                                        /*Proportion of gradient search(=0.001 at start)*/
-long double chisq;                                          /* Variance of residuals in curve fit */
-long double chisql, fchisq, sy;
+double x[maxnpts], y[maxnpts], sigmay[maxnpts];        /*x,y,y uncertainty*/
+double weight[maxnpts];                                /*Weighting factor*/
+double yfit[maxnpts];                                  /*Calculated values of y */
+double a[nterms];                                      /* a[i]=c[i] params */
+double sigmaa[nterms];
+double b[nterms];
+double beta[nterms], c[nterms];                        /*To be fit by program*/
+double finala[nterms], lastsigmaa[nterms];
+double alpha[nterms][nterms];
+double arry[nterms][nterms];
+double aug[nterms][nterms * 2];                        /* For matrix inversion */
+double deriv[maxnpts][nterms];                         /* Derivatives */
+double flambda;                                        /*Proportion of gradient search(=0.001 at start)*/
+double chisq;                                          /* Variance of residuals in curve fit */
+double chisql, fchisq, sy;
 char errorchoice;
 const int BUFF_SIZE = 100;
 char filename[20];
 char answer[BUFF_SIZE];
 FILE *fp;
-errno_t err;
 void readdata();
 void unweightedinput();
 void weightedinput();
@@ -53,10 +52,10 @@ void curvefit(int npoints);
 void display();
 void uncertainties();
 void jackknifedata(char *filename, int k);
-void print_matrix(long double matirx[][nterms], int size_y);
-void print_array(long double _arry[], int size);
+void print_matrix(double matirx[][nterms], int size_y);
+void print_array(double _arry[], int size);
 
-int _tmain(int argc, _TCHAR* argv[]) {
+int main() {
     int i;
     printf("Least Squares Curve Fitting. You must modify the constant\n");
     printf("'nterms' and the fuction 'Fune' for new problems.\n");
@@ -64,11 +63,11 @@ int _tmain(int argc, _TCHAR* argv[]) {
     printf("\nEnter initial guesses for parameters:\n");
     printf("\t(Note: Parameters cannot be exactly zero.)\n");
     for (i = 0; i < nterms; i++) {
-        do {
+        while(a[i] == 0.0) {
             printf("Parameter #%d =   ", i + 1);
             fgets(answer, BUFF_SIZE, stdin);
-        } while (( a[i] = atof(answer) ) == 0.0);        
-        printf("Echo: %f\n", atof(answer));
+            a[i] = atof(answer);
+        }
     }
     printf("Initial A array:\n");
     print_array(a, nterms);
@@ -82,10 +81,10 @@ int _tmain(int argc, _TCHAR* argv[]) {
         iteration = 0;
         cycle = 0;
         printf("\n\tAnother iteration (Y/N)? ");
-        gets_s(answer, BUFF_SIZE);
+        fgets(answer, BUFF_SIZE, stdin);
     } while (answer[0] != 'N' && answer[0] != 'n');
     printf("\nDo you want to calculate uncertainty in parameters (Y/N)?");
-    gets_s(answer, BUFF_SIZE);
+    fgets(answer, BUFF_SIZE, stdin);
     if (answer[0] == 'Y' || answer[0] == 'y') uncertainties();
     return 0;
 }
@@ -94,17 +93,17 @@ int _tmain(int argc, _TCHAR* argv[]) {
 void print_data() {
     int i;
     for (i = 0; i < npts; i++) {
-        printf("%d\tx = %- #12.8Lf\ty = %- #12.8Lf\t", i + 1, x[i], y[i]);
-        printf("Sigmay = %- #12.8Lf\n", sigmay[i]);
+        printf("%d\tx = %- #12.8f\ty = %- #12.8f\t", i + 1, x[i], y[i]);
+        printf("Sigmay = %- #12.8f\n", sigmay[i]);
         weight[i] = 1 / ( sigmay[i] * sigmay[i] );
     }
 }
 
                         /*******************************/
-long double func(int i) /* The function you are fitting*/
+double func(int i) /* The function you are fitting*/
 {                       /*******************************/
     int loop;
-    long double value;
+    double value;
     if (param == 1) {
         for (loop = 0; loop < nterms; loop++) {
             c[loop] = b[loop];
@@ -135,7 +134,7 @@ void readdata() {
     do {
         printf("\nDo you want to enter x,y values or read them from a file?\n");
         printf("\tType E for enter and F for File: ");
-        gets_s(answer, BUFF_SIZE);
+        fgets(answer, BUFF_SIZE, stdin);
         answer[0] = toupper(answer[0]);
     } while (answer[0] != 'E' && answer[0] != 'F');
 
@@ -143,18 +142,22 @@ void readdata() {
     if (answer[0] == 'F') {
         do {
             printf("\nPlease enter the name of the data file: ");
-            gets_s(filename, BUFF_SIZE);
-            printf("\n");            
-            err = fopen_s(&fp, filename, "rb");
-            if (err != 0) {
+            fgets(filename, BUFF_SIZE, stdin);
+            printf("\n");
+#if defined OSX
+            fp = fopen(filename, "rb");
+            if (fp == NULL) {
                 printf("Fatal error: could not open file %s\n", filename);
                 exit(1);
             }
+#else
+
+#endif
 
             for (n = 0; !feof(fp); n++) {
-                fread(&x[n], sizeof( long double ), 1, fp);
-                fread(&y[n], sizeof( long double ), 1, fp);
-                fread(&sigmay[n], sizeof( long double ), 1, fp);
+                fread(&x[n], sizeof( double ), 1, fp);
+                fread(&y[n], sizeof( double ), 1, fp);
+                fread(&sigmay[n], sizeof( double ), 1, fp);
                 if (errorchoice == '1') {
                     sigmay[n] = 1.0;
                 }
@@ -163,7 +166,7 @@ void readdata() {
             npts = n - 1;
             print_data();
             printf("\nIs this data correct (Y/N)?");
-            gets_s(answer, BUFF_SIZE);
+            fgets(answer, BUFF_SIZE, stdin);
         } while (answer[0] != 'Y' && answer[0] != 'y');
     }
     // Enter data manually
@@ -173,7 +176,7 @@ void readdata() {
             printf("\tl. Let the program weight all points equally\n");
             printf("\t2. Enter estimated uncertainty for each point\n\n");
             printf("Choose option 1 or 2 now: ");
-            gets_s(answer, BUFF_SIZE);
+            fgets(answer, BUFF_SIZE, stdin);
         } while (answer[0] != '1' && answer[0] != '2');
 
         errorchoice = answer[0];
@@ -189,21 +192,25 @@ void readdata() {
             }
             print_data();
             printf("Is this data correct(Y/N)?");
-            gets_s(answer, BUFF_SIZE);
+            fgets(answer, BUFF_SIZE, stdin);
         } while (answer[0] != 'y' && answer[0] != 'Y');
         printf("Enter name of file to save the data in: ");
-        gets_s(filename, BUFF_SIZE);
-        err = fopen_s(&fp, filename, "wb");        
+        fgets(filename, BUFF_SIZE, stdin);
+#if defined OSX
+        fp = fopen(filename, "wb");
 
-        if (err != 0) {
+        if (fp == NULL) {
             printf("Fatal error: could not open file %s\n", filename);
             exit(1);
         }
+#else
+
+#endif
 
         for (n = 0; n < npts; n++) {
-            fwrite(&x[n], sizeof( long double ), 1, fp);
-            fwrite(&y[n], sizeof( long double ), 1, fp);
-            fwrite(&sigmay[n], sizeof( long double ), 1, fp);
+            fwrite(&x[n], sizeof( double ), 1, fp);
+            fwrite(&y[n], sizeof( double ), 1, fp);
+            fwrite(&sigmay[n], sizeof( double ), 1, fp);
         }
 
         fclose(fp);
@@ -222,11 +229,13 @@ void unweightedinput() {
         if (answer[0] == 'E' || answer[0] == 'e') {
             break;
         }
+        // Convert first part of string input
         x[n] = atof(answer);
         i = 0;
         while (answer[i] != ' ' && answer[i] != '\0') {
             i++;
         }
+        // Convert second half of string input
         y[n] = atof(answer + i);
         sigmay[n] = 1;
     }
@@ -273,7 +282,7 @@ void chisquare() {
 // Numerical derivative
 void calcderivative() {
     int i, m;
-    long double atemp, delta;
+    double atemp, delta;
     for (m = 0; m < nterms; m++) {
         atemp = a[m];
         delta = fabs(a[m] / 100000);
@@ -291,7 +300,7 @@ void calcderivative() {
 // Pivoting reduces rounding error
 void matrixinvert() {
     int i, j, k, ik[nterms], jk[nterms];
-    long double rsave, amax;
+    double rsave, amax;
 
     for (k = 0; k < nterms; k++) {
 
@@ -377,8 +386,6 @@ void curvefit(int npoints) {
             alpha[j][k] = 0;
         }
     }
-    printf("Null alpha matrix:\n");
-    print_matrix(alpha, nterms);
     param = 0;
     
     // Find y values for current parameter values
@@ -447,18 +454,18 @@ void display() {
     int i;
     printf("\nIteration #%d\n", iteration);
     for (i = 0; i < nterms; i++) {
-        printf("A[%3dl = %-#12.8Lf\n", i, a[i]);
+        printf("A[%3dl = %-#12.8f\n", i, a[i]);
         finala[i] = a[i];
     }
-    printf("Sum of squares of residuals = %- #12.8Lf", fchisq * nfree);
+    printf("Sum of squares of residuals = %- #12.8f", fchisq * nfree);
     sy = sqrt(fchisq);
 }
 
 // Calculates uncertainties by removing one data point and recalculating parameters
 void uncertainties() {
     int i, k;
-    long double ajack[nterms][maxnpts];
-    long double avajack[nterms];
+    double ajack[nterms][maxnpts];
+    double avajack[nterms];
 
     do {
         cycle++;
@@ -491,31 +498,35 @@ void uncertainties() {
                 sigmaa[k] += ( ajack[k][i] - avajack[k] ) * ( ajack[k][i] - avajack[k] );
             }
             sigmaa[k] = sqrt(( npts - 1 ) * sigmaa[k] / npts);
-            printf("Parameter[%d] = %- 12.8Lf +/- %- 12.8Lf\n", k, finala[k], sigmaa[k]);
+            printf("Parameter[%d] = %- 12.8f +/- %- 12.8f\n", k, finala[k], sigmaa[k]);
             if (cycle > 1) {
-                printf("\t(Previous uncertainty = %- #12.8Lf)\n\n", lastsigmaa[k]);
+                printf("\t(Previous uncertainty = %- #12.8f)\n\n", lastsigmaa[k]);
                 lastsigmaa[k] = sigmaa[k];
             }
         }
-        printf("Standard deviation of y = %-#12.8Lf\n", sy);
+        printf("Standard deviation of y = %-#12.8f\n", sy);
         printf("Above result is based %d iterations\n", iteration);
         iteration += 5;
         printf("Iterations will now be increased to %d" " to see if the estimates of \n", iteration);
         printf("uncertainty change. When consecutive cycles give\n");
         printf("similar results, it is time to stop.\n");
         printf("\tDo you want to try another cycle now (Y/N)? ");
-        gets_s(answer, BUFF_SIZE);
+        fgets(answer, BUFF_SIZE, stdin);
     } while (answer[0] == 'y' || answer[0] == 'Y');
 }
 
 // Removes one data point
 void jackknifedata(char *filename, int k) {
     int n = 0;    
-    err = fopen_s(&fp, filename, "rb");
+#if defined OSX
+    fp = fopen(filename, "rb");
+#else
+#endif
+
     while (!feof(fp)) {
-        fread(&x[n], sizeof( long double ), 1, fp);
-        fread(&y[n], sizeof( long double ), 1, fp);
-        fread(&sigmay[n], sizeof( long double ), 1, fp);
+        fread(&x[n], sizeof( double ), 1, fp);
+        fread(&y[n], sizeof( double ), 1, fp);
+        fread(&sigmay[n], sizeof( double ), 1, fp);
         if (errorchoice == 'l') {
             sigmay[n] = 1.0;
         }
@@ -533,7 +544,7 @@ void jackknifedata(char *filename, int k) {
     }
 }
 
-void print_matrix(double long matrix[][nterms], int size_x) {
+void print_matrix(double matrix[][nterms], int size_x) {
     for (int i = 0; i < nterms; i++) {
         for (int j = 0; j < size_x; j++) {
             printf("%f, ", matrix[i][j]);
@@ -542,9 +553,9 @@ void print_matrix(double long matrix[][nterms], int size_x) {
     }
 }
 
-void print_array(double long _arry[], int size) {
+void print_array(double this_array[], int size) {
     for (int i = 0; i < size; i++) {
-        printf("%f, ", _arry[i]);
+        printf("%f, ", this_array[i]);
     }
     printf("\n");
 }
