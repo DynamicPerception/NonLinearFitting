@@ -86,9 +86,6 @@ int main() {
         printf("\n\tAnother iteration (Y/N)? ");
         fgets(answer, BUFF_SIZE, stdin);
     } while (answer[0] != 'N' && answer[0] != 'n');
-    printf("\nDo you want to calculate uncertainty in parameters (Y/N)?");
-    fgets(answer, BUFF_SIZE, stdin);
-    if (answer[0] == 'Y' || answer[0] == 'y') uncertainties();
     return 0;
 }
 
@@ -179,24 +176,7 @@ void readdata() {
     // Enter data manually
     else {
         do {
-            printf("\nChoices for error analysis : \n");
-            printf("\tl. Let the program weight all points equally\n");
-            printf("\t2. Enter estimated uncertainty for each point\n\n");
-            printf("Choose option 1 or 2 now: ");
-            fgets(answer, BUFF_SIZE, stdin);
-        } while (answer[0] != '1' && answer[0] != '2');
-
-        errorchoice = answer[0];
-
-        do {
-            if (errorchoice == '1') {
-                printf("UW input\n");
-                unweightedinput();
-            }
-            else if (errorchoice == '2') {
-                printf("Weighted input\n");
-                weightedinput();
-            }
+            unweightedinput();
             print_data();
             printf("Is this data correct(Y/N)?");
             fgets(answer, BUFF_SIZE, stdin);
@@ -469,98 +449,6 @@ void display() {
     }
     printf("Sum of squares of residuals = %- #12.8f", fchisq * nfree);
     sy = sqrt(fchisq);
-}
-
-// Calculates uncertainties by removing one data point and recalculating parameters
-void uncertainties() {
-    int i, k;
-    double ajack[nterms][maxnpts];
-    double avajack[nterms];
-
-    do {
-        cycle++;
-        printf("Calculating uncertainties...");
-        for (i = 0; i < npts; i++) {
-            jackknifedata(filename, i++);
-            for (k = 0; k <= iteration; k++) {
-                curvefit(npts - 1);
-            }
-            printf("Now playing with the data point %d\n", i + 1);
-            for (k = 0; k < nterms; k++) {
-                ajack[k][i] = a[k];
-            }
-        }
-        printf("\n\n");
-        for (k = 0; k < nterms; k++) {
-            avajack[k] = 0;
-        }
-        for (k = 0; k < nterms; k++) {
-            for (i = 0; i < npts; i++) {
-                avajack[k] += ajack[k][i];
-            }
-            avajack[k] = avajack[k] / npts;
-        }
-        for (k = 0; k < nterms; k++) {
-            sigmaa[k] = 0;
-        }
-        for (k = 0; k < nterms; k++) {
-            for (i = 0; i < npts; i++) {
-                sigmaa[k] += ( ajack[k][i] - avajack[k] ) * ( ajack[k][i] - avajack[k] );
-            }
-            sigmaa[k] = sqrt(( npts - 1 ) * sigmaa[k] / npts);
-            printf("Parameter[%d] = %- 12.8f +/- %- 12.8f\n", k, finala[k], sigmaa[k]);
-            if (cycle > 1) {
-                printf("\t(Previous uncertainty = %- #12.8f)\n\n", lastsigmaa[k]);
-                lastsigmaa[k] = sigmaa[k];
-            }
-        }
-        printf("Standard deviation of y = %-#12.8f\n", sy);
-        printf("Above result is based %d iterations\n", iteration);
-        iteration += 5;
-        printf("Iterations will now be increased to %d" " to see if the estimates of \n", iteration);
-        printf("uncertainty change. When consecutive cycles give\n");
-        printf("similar results, it is time to stop.\n");
-        printf("\tDo you want to try another cycle now (Y/N)? ");
-        fgets(answer, BUFF_SIZE, stdin);
-    } while (answer[0] == 'y' || answer[0] == 'Y');
-}
-
-// Removes one data point
-void jackknifedata(char *filename, int k) {
-    int n = 0;    
-#if defined _WIN32
-    err = fopen_s(&fp, filename, "rb");
-    if (err != 0) {
-        printf("Fatal error: could not open file %s\n", filename);
-        exit(1);
-    }
-#else
-    fp = fopen(filename, "rb");
-    if (fp == NULL) {
-        printf("Fatal error: could not open file %s\n", filename);
-        exit(1);
-    }
-#endif
-
-    while (!feof(fp)) {
-        fread(&x[n], sizeof( double ), 1, fp);
-        fread(&y[n], sizeof( double ), 1, fp);
-        fread(&sigmay[n], sizeof( double ), 1, fp);
-        if (errorchoice == 'l') {
-            sigmay[n] = 1.0;
-        }
-        weight[n] = 1 / ( sigmay[n] * sigmay[n] );
-        n++;
-        npts = n - 1;
-        fclose(fp);
-        for (n = 0; n < ( npts - 1 ); n++) {
-            if (n >= k) {
-                x[n] = x[n + 1];
-                y[n] = y[n + 1];
-                weight[n] = weight[n + 1];
-            }
-        }
-    }
 }
 
 void print_matrix(double matrix[][nterms], int size_x) {
