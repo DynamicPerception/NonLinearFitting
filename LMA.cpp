@@ -232,31 +232,6 @@ void unweightedinput() {
     npts = n;
 }
 
-// Enter unequal weighted data
-void weightedinput() {
-    int i, n;
-    printf("List the data in the order: x   y sigmay, with one set on\n");
-    printf("each line and a space (not a comma) between the numbers.\n");
-    printf("Type END to end input\n"); for (n = 0;; n++) {
-        fgets(answer, BUFF_SIZE, stdin);
-        if (answer[0] == 'E' || answer[0] == 'e') {
-            break;
-        }
-        x[n] = atof(answer);
-        i = 0;
-        while (answer[i] != ' ' && answer[i] != '\0') {
-            i++;
-        }
-        y[n] = atof(answer + i);
-        i++;
-        while (answer[i] != ' ' && answer[i] != '\0') {
-            i++;
-        }
-        sigmay[n] = atof(answer + i);
-    }
-    npts = n;
-}
-
 // Sum of square of differences between measured and calculated y values
 void chisquare() {
     int i;
