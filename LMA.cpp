@@ -5,7 +5,6 @@ Analysis for the Physical Sciences," McGraw-Hill, 1969; Adapted by
 Wayne Weimer & David Harris. Jackknife error algorithm of M.S. Caceci,
 Anal. Chem. 1989, 61, 2324. Translated to ANSI C by Douglas Harris &
 Tim Seufert 7-94 */
-#define OSX
 #include "stdafx.h"
 #include <stdio.h>
 #include <Stdlib.h>
@@ -54,6 +53,10 @@ void uncertainties();
 void jackknifedata(char *filename, int k);
 void print_matrix(double matirx[][nterms], int size_y);
 void print_array(double _arry[], int size);
+
+#if defined _WIN32
+errno_t err;
+#endif
 
 int main() {
     int i;
@@ -144,14 +147,18 @@ void readdata() {
             printf("\nPlease enter the name of the data file: ");
             fgets(filename, BUFF_SIZE, stdin);
             printf("\n");
-#if defined OSX
+#if defined _WIN32
+            err = fopen_s(&fp, filename, "rb");
+            if (err != 0) {
+                printf("Fatal error: could not open file %s\n", filename);
+                exit(1);
+            }
+#else
             fp = fopen(filename, "rb");
             if (fp == NULL) {
                 printf("Fatal error: could not open file %s\n", filename);
                 exit(1);
             }
-#else
-
 #endif
 
             for (n = 0; !feof(fp); n++) {
@@ -196,15 +203,18 @@ void readdata() {
         } while (answer[0] != 'y' && answer[0] != 'Y');
         printf("Enter name of file to save the data in: ");
         fgets(filename, BUFF_SIZE, stdin);
-#if defined OSX
-        fp = fopen(filename, "wb");
-
-        if (fp == NULL) {
+#if defined _WIN32
+        err = fopen_s(&fp, filename, "wb");
+        if (err != 0) {
             printf("Fatal error: could not open file %s\n", filename);
             exit(1);
         }
 #else
-
+        fp = fopen(filename, "wb");
+        if (fp == NULL) {
+            printf("Fatal error: could not open file %s\n", filename);
+            exit(1);
+        }
 #endif
 
         for (n = 0; n < npts; n++) {
@@ -518,9 +528,18 @@ void uncertainties() {
 // Removes one data point
 void jackknifedata(char *filename, int k) {
     int n = 0;    
-#if defined OSX
-    fp = fopen(filename, "rb");
+#if defined _WIN32
+    err = fopen_s(&fp, filename, "rb");
+    if (err != 0) {
+        printf("Fatal error: could not open file %s\n", filename);
+        exit(1);
+    }
 #else
+    fp = fopen(filename, "rb");
+    if (fp == NULL) {
+        printf("Fatal error: could not open file %s\n", filename);
+        exit(1);
+    }
 #endif
 
     while (!feof(fp)) {
