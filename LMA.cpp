@@ -1,4 +1,5 @@
 /*Nonlinear Least Squares Curve Fitting Program*/
+// Reference: http://mads.lanl.gov/presentations/Leif_LM_presentation_m.pdf
 
 /*Marquardt algorithm from P.R. Bevington,"Data Reduction and Error
 Analysis for the Physical Sciences," McGraw-Hill, 1969; Adapted by
@@ -19,23 +20,21 @@ Tim Seufert 7-94 */
 #define nterms 2
 /* Number of parameters to be fit */
 /***********************************************************/
-int param, iteration, nloops, n, cycle, nfree;
+int param, iteration, n, nfree;
 int npts;                                                   /* Number of data pairs */
-double x[maxnpts], y[maxnpts], sigmay[maxnpts];        /*x,y,y uncertainty*/
-double weight[maxnpts];                                /*Weighting factor*/
+double x[maxnpts], y[maxnpts];        /*x,y,y*/
 double yfit[maxnpts];                                  /*Calculated values of y */
-double a[nterms];                                      /* a[i]=c[i] params */
-double sigmaa[nterms];
+double params[nterms];                                      /* a[i]=c[i] params */
 double b[nterms];
-double beta[nterms], c[nterms];                        /*To be fit by program*/
-double finala[nterms], lastsigmaa[nterms];
+double gradient[nterms], c[nterms];                        /*To be fit by program*/
+double final_params[nterms];
 double alpha[nterms][nterms];
 double arry[nterms][nterms];
 double aug[nterms][nterms * 2];                        /* For matrix inversion */
-double deriv[maxnpts][nterms];                         /* Derivatives */
-double flambda;                                        /*Proportion of gradient search(=0.001 at start)*/
+double J[maxnpts][nterms];                             /* Derivatives */
+double lambda;                                        /*Proportion of gradient search(=0.001 at start)*/
 double chisq;                                          /* Variance of residuals in curve fit */
-double chisql, fchisq, sy;
+double chisq_ref_val, chisq, sy;
 char errorchoice;
 const int BUFF_SIZE = 100;
 char filename[20];
@@ -43,16 +42,17 @@ char answer[BUFF_SIZE];
 FILE *fp;
 void readdata();
 void unweightedinput();
-void weightedinput();
-void chisquare();
-void calcderivative();
+void computeChisquare();
+void computeJacobian();
 void matrixinvert();
-void curvefit(int npoints);
+void curvefit();
 void display();
 void uncertainties();
 void jackknifedata(char *filename, int k);
 void print_matrix(double matirx[][nterms], int size_y);
 void print_array(double _arry[], int size);
+double residual(int i);
+void updateResiduals();
 
 #if defined _WIN32
 errno_t err;
@@ -66,23 +66,21 @@ int main() {
     printf("\nEnter initial guesses for parameters:\n");
     printf("\t(Note: Parameters cannot be exactly zero.)\n");
     for (i = 0; i < nterms; i++) {
-        while(a[i] == 0.0) {
+        while(params[i] == 0.0) {
             printf("Parameter #%d =   ", i + 1);
             fgets(answer, BUFF_SIZE, stdin);
-            a[i] = atof(answer);
+            params[i] = atof(answer);
         }
     }
-    printf("Initial A array:\n");
-    print_array(a, nterms);
-    flambda = 0.001;
+    printf("Initial parameters:\n");
+    print_array(params, nterms);
+    lambda = 0.001;
     iteration = 0;
-    cycle = 0;
     do {
-        curvefit(npts);
+        curvefit();
         iteration++;
         display();
         iteration = 0;
-        cycle = 0;
         printf("\n\tAnother iteration (Y/N)? ");
         fgets(answer, BUFF_SIZE, stdin);
     } while (answer[0] != 'N' && answer[0] != 'n');
@@ -94,13 +92,11 @@ void print_data() {
     int i;
     for (i = 0; i < npts; i++) {
         printf("%d\tx = %- #12.8f\ty = %- #12.8f\t", i + 1, x[i], y[i]);
-        printf("Sigmay = %- #12.8f\n", sigmay[i]);
-        weight[i] = 1 / ( sigmay[i] * sigmay[i] );
     }
 }
 
                         /*******************************/
-double func(int i) /* The function you are fitting*/
+double func(double p_x) /* The function you are fitting*/
 {                       /*******************************/
     int loop;
     double value;
@@ -111,15 +107,15 @@ double func(int i) /* The function you are fitting*/
     }
     else {
         for (loop = 0; loop < nterms; loop++) {
-            c[loop] = a[loop];
+            c[loop] = params[loop];
         }
     }
 
     /********************************************/
     /*      Enter the function to be fit:       */
     /********************************************/    
-    value = c[0] * x[i] + c[1]; /*Linear Equation*/    
-    printf("\nfunc(i) -- i: %d  a: %f  x: %f  b: %f  =  value: %f\n", i, c[0], x[i], c[1], value);
+    value = c[0] * p_x + c[1]; /*Linear Equation*/
+    printf("\nfunc(x) -- a: %f  x: %f  b: %f  =  value: %f\n", c[0], p_x, c[1], value);
     // x[i] is the independent variable
     // Values of c[n], c[n-1], c[0] are determined by least squares
     // nterms must be set to equal n+l
@@ -161,10 +157,6 @@ void readdata() {
             for (n = 0; !feof(fp); n++) {
                 fread(&x[n], sizeof( double ), 1, fp);
                 fread(&y[n], sizeof( double ), 1, fp);
-                fread(&sigmay[n], sizeof( double ), 1, fp);
-                if (errorchoice == '1') {
-                    sigmay[n] = 1.0;
-                }
             }
             fclose(fp);
             npts = n - 1;
@@ -200,7 +192,6 @@ void readdata() {
         for (n = 0; n < npts; n++) {
             fwrite(&x[n], sizeof( double ), 1, fp);
             fwrite(&y[n], sizeof( double ), 1, fp);
-            fwrite(&sigmay[n], sizeof( double ), 1, fp);
         }
 
         fclose(fp);
@@ -227,37 +218,36 @@ void unweightedinput() {
         }
         // Convert second half of string input
         y[n] = atof(answer + i);
-        sigmay[n] = 1;
     }
     npts = n;
 }
 
 // Sum of square of differences between measured and calculated y values
-void chisquare() {
+void computeChisquare() {
     int i;
-    fchisq = 0;
+    chisq = 0;
     for (i = 0; i < npts; i++){        
-        fchisq += weight[i] * ( y[i] - yfit[i] ) * ( y[i] - yfit[i] );
-        printf("y[i]: %f -- yfit[i]: %f -- fchisq: %f\n", y[i], yfit[i], fchisq);
+        chisq += residual(i) * residual(i);
+        printf("y[i]: %f -- yfit[i]: %f -- chisq: %f\n", y[i], yfit[i], chisq);
     }
-    fchisq /= nfree;
-    printf("Final chisq: %f\n\n", fchisq);
+    chisq /= nfree;
+    printf("Final chisq: %f\n\n", chisq);
 }
 
 // Numerical derivative
-void calcderivative() {
+void computeJacobian() {
     int i, m;
-    double atemp, delta;
+    double param_temp, delta;
     for (m = 0; m < nterms; m++) {
-        atemp = a[m];
-        delta = fabs(a[m] / 100000);
-        a[m] = atemp + delta;
+        param_temp = params[m];
+        delta = fabs(params[m] / 100000);
+        params[m] = param_temp + delta;
         for (i = 0; i < npts; i++) {
-            deriv[i][m] = ( func(i) - yfit[i] ) / delta;
-            a[m] = atemp;
+            J[i][m] = (func(i) - yfit[i]) / delta;
+            params[m] = param_temp;
         }
-        printf("\nNumerical derivative matrix:\n");
-        print_matrix(deriv, npts);
+        printf("\nJacobian matrix:\n");
+        print_matrix(J, npts);
     }
 }
 
@@ -273,7 +263,7 @@ void matrixinvert() {
 
         for (i = k; i < nterms; i++) {
             for (j = k; j < nterms; j++) {
-                if (abs(amax) <= abs(arry[i][j])) {
+                if (fabs(amax) <= fabs(arry[i][j])) {
                     amax = arry[i][j];
                     ik[k] = i;
                     jk[k] = j;
@@ -340,13 +330,13 @@ void matrixinvert() {
 }
 
 // Curve fitting algorithm
-void curvefit(int npoints) {
+void curvefit() {
     int i, j, k;
-    nfree = npoints - nterms;
+    nfree = npts - nterms;
     
-    // Clear b and beta arrays
+    // Clear b and gradient vectors
     for (j = 0; j < nterms; j++) {
-        b[j] = beta[j] = 0;
+        b[j] = gradient[j] = 0;
         for (k = 0; k <= j; k++) {
             alpha[j][k] = 0;
         }
@@ -354,64 +344,74 @@ void curvefit(int npoints) {
     param = 0;
     
     // Find y values for current parameter values
-    for (i = 0; i < npoints; i++) {
-        yfit[i] = func(i);
+    updateResiduals();
+    computeChisquare();
+    chisq_ref_val = chisq;
+
+    // Find the Jacobian
+    printf("\nComputing Jacobian matrix\n");
+    computeJacobian();
+
+    printf("Computing gradient\n");
+    // For each data point set...
+    for (i = 0; i < npts; i++) {
+        for (j = 0; j < nterms; j++) {
+            // Produces a vector of 1 x nterms
+            gradient[j] += residual(i) * J[i][j];   //  Compute gradient vector
+        }
     }
-    printf("\nyfit array:\n");
-    print_array(yfit, npts);
-
-    // Find the chi squared value
-    chisquare();
-    chisql = fchisq;
-
-    // Find the derivative
-    calcderivative();
 
     // For each data point set...
-    for (i = 0; i < npoints; i++) {
-        // ... for each parmeter term...
+    for (i = 0; i < npts; i++) {
+        // ... for each parameter term...
         for (j = 0; j < nterms; j++) {
-            // beta = weight * (data point y - estimated y) * derivative
-            beta[j] += weight[i] * ( y[i] - yfit[i] ) * deriv[i][j];
+            // res vector is 1 x npts, Jacobian is npts x nterms
             for (k = 0; k <= j; k++) {
-                alpha[j][k] += ( weight[i] * deriv[i][j] * deriv[i][k] );
+                alpha[j][k] += J[i][j] * J[i][k]; // J(T)*J ???
             }
         }
     }
-    printf("\nPopulated alpha array:\n");
-    print_matrix(alpha, nterms);
+
+    // Transpose matrix
     for (j = 0; j < nterms; j++) {
         for (k = 0; k <= j; k++) {
             alpha[k][j] = alpha[j][k];
         }
     }
-    nloops = 0;
+
+    // Keep looping until new chisq is less than old chisq
     do {
         param = 1;
         for (j = 0; j < nterms; j++) {
             for (k = 0; k < nterms; k++) {
                 arry[j][k] = alpha[j][k] / sqrt(alpha[j][j] * alpha[k][k]);
             }
-            arry[j][j] = flambda + 1;
+            arry[j][j] += lambda;
         }
         matrixinvert();
         for (j = 0; j < nterms; j++) {
-            b[j] += beta[k] * arry[j][k] / sqrt(alpha[j][j] * alpha[k][k]);
+            b[j] += gradient[k] * arry[j][k] / sqrt(alpha[j][j] * alpha[k][k]);
         }
-        for (i = 0; i < npoints; i++) {
-            yfit[i] = func(i);
+        updateResiduals();
+        computeChisquare();
+        if (( chisq_ref_val - chisq ) < 0) {
+            lambda *= 10;
         }
-        chisquare();
-        if (( chisql - fchisq ) < 0) {
-            flambda *= 10;
-        }
-        nloops++;
-    } while (fchisq > chisql);
+    } while(chisq > chisq_ref_val);
     for (j = 0; j < nterms; j++) {
-        a[j] = b[j];
-        sigmaa[j] = sqrt(arry[j][j] / alpha[j][j]);
+        params[j] = b[j];
     }
-    flambda /= 10;
+    lambda /= 10;
+}
+
+void updateResiduals(){
+    for (int i = 0; i < npts; i++) {
+        yfit[i] = func(x[i]);
+    }
+}
+
+double residual(int i){
+    return y[i] - yfit[i];
 }
 
 // Prints result of curve fit
@@ -419,16 +419,16 @@ void display() {
     int i;
     printf("\nIteration #%d\n", iteration);
     for (i = 0; i < nterms; i++) {
-        printf("A[%3dl = %-#12.8f\n", i, a[i]);
-        finala[i] = a[i];
+        printf("Params[%3dl = %-#12.8f\n", i, params[i]);
+        final_params[i] = params[i];
     }
-    printf("Sum of squares of residuals = %- #12.8f", fchisq * nfree);
-    sy = sqrt(fchisq);
+    printf("Sum of squares of residuals = %- #12.8f", chisq * nfree);
+    sy = sqrt(chisq);
 }
 
 void print_matrix(double matrix[][nterms], int size_x) {
-    for (int i = 0; i < nterms; i++) {
-        for (int j = 0; j < size_x; j++) {
+    for (int i = 0; i < size_x; i++) {
+        for (int j = 0; j < nterms; j++) {
             printf("%f, ", matrix[i][j]);
         }
         printf("\n");
