@@ -34,7 +34,7 @@ double aug[nterms][nterms * 2];                        /* For matrix inversion *
 double J[maxnpts][nterms];                             /* Derivatives */
 double lambda;                                        /*Proportion of gradient search(=0.001 at start)*/
 double chisq;                                          /* Variance of residuals in curve fit */
-double chisq_ref_val, chisq, sy;
+double chisq_ref_val, sy;
 char errorchoice;
 const int BUFF_SIZE = 100;
 char filename[20];
@@ -61,7 +61,7 @@ errno_t err;
 int main() {
     int i;
     printf("Least Squares Curve Fitting. You must modify the constant\n");
-    printf("'nterms' and the fuction 'Fune' for new problems.\n");
+    printf("'nterms' and the fuction 'Func' for new problems.\n");
     readdata();
     printf("\nEnter initial guesses for parameters:\n");
     printf("\t(Note: Parameters cannot be exactly zero.)\n");
@@ -91,7 +91,7 @@ int main() {
 void print_data() {
     int i;
     for (i = 0; i < npts; i++) {
-        printf("%d\tx = %- #12.8f\ty = %- #12.8f\t", i + 1, x[i], y[i]);
+        printf("%d\tx = %- #12.8f\ty = %- #12.8f\t\n", i + 1, x[i], y[i]);
     }
 }
 
@@ -114,12 +114,9 @@ double func(double p_x) /* The function you are fitting*/
     /********************************************/
     /*      Enter the function to be fit:       */
     /********************************************/    
-    value = c[0] * p_x + c[1]; /*Linear Equation*/
-    printf("\nfunc(x) -- a: %f  x: %f  b: %f  =  value: %f\n", c[0], p_x, c[1], value);
-    // x[i] is the independent variable
-    // Values of c[n], c[n-1], c[0] are determined by least squares
-    // nterms must be set to equal n+l
-    // Example of another function: value= c[2]*x[i]*x[i]+c[l]*x[i]+c[O]
+    //value = c[0] * p_x * p_x + c[1] * p_x + c[2]; /*Ax^2 + Bx + C*/
+    value = c[0] * cos(c[1] * p_x) + c[1] * sin(c[0] * p_x);
+    printf("\nfunc(x) -- A*cos(BX) + B*sin(AX) -- x: %f a: %f  b: %f  =  value: %f\n", p_x, c[0], c[1], value);
     return ( value );
 }
 
@@ -160,6 +157,7 @@ void readdata() {
             }
             fclose(fp);
             npts = n - 1;
+            printf("This set contains %d points\n", npts);
             print_data();
             printf("\nIs this data correct (Y/N)?");
             fgets(answer, BUFF_SIZE, stdin);
@@ -238,17 +236,19 @@ void computeChisquare() {
 void computeJacobian() {
     int i, m;
     double param_temp, delta;
+    printf("%d terms, %d points", nterms, npts);
     for (m = 0; m < nterms; m++) {
         param_temp = params[m];
         delta = fabs(params[m] / 100000);
         params[m] = param_temp + delta;
         for (i = 0; i < npts; i++) {
-            J[i][m] = (func(i) - yfit[i]) / delta;
-            params[m] = param_temp;
+            printf("Computing data point %d", i);
+            J[i][m] = (func(x[i]) - yfit[i]) / delta;
         }
-        printf("\nJacobian matrix:\n");
-        print_matrix(J, npts);
+        params[m] = param_temp;
     }
+    printf("\nJacobian matrix:\n");
+    print_matrix(J, npts);
 }
 
 // Inverts the matrix array[][]
